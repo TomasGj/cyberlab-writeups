@@ -1,0 +1,16 @@
+# CyberLab writeups — archivos que NUNCA deben subirse
+*.tmp
+*.log
+secrets.txt
+passwords.txt
+*.key
+*.pem
+id_rsa*
+valid_users.txt
+nxc_logs/
+loot/
+
+# Sistema
+.DS_Store
+Thumbs.db
+desktop.ini
