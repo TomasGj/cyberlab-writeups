@@ -344,6 +344,11 @@ footer a{font-family:var(--mono);font-size:.82rem}
     Usuarios de prueba creados en el laboratorio: <span class="mono">thom1</span> y <span class="mono">leslye</span>,
     pertenecientes al OU <span class="mono">RRHH</span>.
   </p>
+
+  <figure>
+    <img src="assets/img/01-topologia.png" alt="VirtualBox con las tres maquinas del laboratorio en ejecucion: pfSense, Windows Server y Kali Linux">
+    <figcaption><b>Fig. 1</b> — Topología en marcha: pfSense como gateway, el DC Windows Server y la estación atacante Kali Linux en la red interna <span class="mono">Zona-Ataque</span>.</figcaption>
+  </figure>
 </section>
 
 <hr class="sep">
@@ -358,7 +363,7 @@ footer a{font-family:var(--mono);font-size:.82rem}
 
   <div class="term">
     <div class="bar"><i></i><i></i><i></i><span>kali@lab — nmap</span></div>
-<pre><span class="p">$</span> <span class="hi">sudo nmap -sS -Pn -F 192.168.1.10</span>
+<pre><span class="p">$</span> <span class="hi">sudo nmap -sS -Pn --top-ports 1000 192.168.1.10</span>
 <span class="o">Starting Nmap 7.95 ( https://nmap.org )</span>
 <span class="o">Nmap scan report for 192.168.1.10</span>
 <span class="o">Host is up (0.0011s latency).</span>
@@ -388,6 +393,11 @@ footer a{font-family:var(--mono);font-size:.82rem}
     No hace falta un escaneo agresivo: un barrido rápido bien dirigido da el inventario suficiente para
     decidir la siguiente fase. Menos ruido, menos detección.
   </div>
+
+  <figure>
+    <img src="assets/img/02-nmap.png" alt="Terminal de Kali mostrando el resultado del escaneo nmap contra el controlador de dominio">
+    <figcaption><b>Fig. 2</b> — Firma inequívoca de Domain Controller: <span class="mono">53</span>, <span class="mono">88</span>, <span class="mono">389</span>, <span class="mono">445</span> y <span class="mono">3268</span> abiertos, más <span class="mono">5985</span> (WinRM) como vía de ejecución remota.</figcaption>
+  </figure>
 </section>
 
 <hr class="sep">
@@ -415,6 +425,16 @@ footer a{font-family:var(--mono);font-size:.82rem}
 <span class="o">[*] Valid user => krbtgt [ADMIN]</span>
 <span class="o">[*] Saved 4 users to valid_users.txt</span>
 <span class="o">[*] Done! Tested 120 usernames (4 valid) in 3.11 seconds</span></pre>
+
+  <figure>
+    <img src="assets/img/04-kerbrute.png" alt="kerbrute enumerando usuarios validos del dominio hacklab.local">
+    <figcaption><b>Fig. 3</b> — Kerberos confirma <span class="mono">thom1</span>, <span class="mono">leslye</span>, <span class="mono">Administrator</span> y <span class="mono">krbtgt</span> como cuentas válidas sin haber enviado una sola credencial. El wordlist <a href="nombres.txt"><span class="mono">nombres.txt</span></a> (120 usuarios) está en el repositorio para que el resultado sea reproducible.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/img/03-ad-users.png" alt="Consola Active Directory Users and Computers mostrando los usuarios del OU RRHH">
+    <figcaption><b>Fig. 4</b> — Las cuentas enumeradas existen realmente: <span class="mono">thom1</span> y <span class="mono">leslye</span> dentro del OU <span class="mono">RRHH</span>.</figcaption>
+  </figure>
   </div>
 
   <p>
@@ -436,6 +456,16 @@ footer a{font-family:var(--mono);font-size:.82rem}
 <span class="ok">ADMIN$          READ,WRITE     Remote Admin</span>
 <span class="ok">NETLOGON        READ           Logon server share</span>
 <span class="ok">SYSVOL          READ           Logon server share</span></pre>
+
+  <figure>
+    <img src="assets/img/05-netexec-users.png" alt="netexec confirmando credenciales validas y enumerando usuarios del dominio">
+    <figcaption><b>Fig. 5</b> — Credenciales válidas confirmadas sobre SMB: <span class="mono">[+] hacklab.local\thom1:Developer3</span>.</figcaption>
+  </figure>
+
+  <figure>
+    <img src="assets/img/06-netexec-shares.png" alt="netexec listando los recursos compartidos con sus permisos">
+    <figcaption><b>Fig. 6</b> — <span class="mono">ADMIN$</span> y <span class="mono">C$</span> con permiso de escritura para una cuenta de RRHH: la ejecución remota queda habilitada.</figcaption>
+  </figure>
   </div>
 
   <div class="note warn">
@@ -475,6 +505,11 @@ footer a{font-family:var(--mono);font-size:.82rem}
 
 <span class="p">C:\Windows\system32></span> <span class="hi">hostname</span>
 <span class="o">DC01</span></pre>
+
+  <figure>
+    <img src="assets/img/07-psexec-system.png" alt="Sesion remota en el controlador de dominio mostrando whoami como nt authority system">
+    <figcaption><b>Fig. 7</b> — Compromiso total del DC: <span class="mono">whoami</span> devuelve <span class="bad">nt authority\system</span> y <span class="mono">hostname</span> confirma <span class="mono">DC01</span>.</figcaption>
+  </figure>
   </div>
 
   <div class="note danger">
@@ -568,6 +603,11 @@ footer a{font-family:var(--mono);font-size:.82rem}
     </tbody>
   </table>
 
+  <figure>
+    <img src="assets/img/08-gpo-bloqueo.png" alt="Consola Group Policy Management con la GPO Bloquear-CMD-RRHH y su directiva configurada">
+    <figcaption><b>Fig. 8</b> — GPO <span class="mono">Bloquear-CMD-RRHH</span> con la directiva <em>Prevent access to the command prompt</em> activada y vinculada al OU RRHH.</figcaption>
+  </figure>
+
   <div class="flow">
     <div class="step"><b>1</b>Crear GPO en el dominio</div>
     <span class="arrow">→</span>
@@ -590,6 +630,11 @@ footer a{font-family:var(--mono);font-size:.82rem}
 <span class="o">C:\Users\thom1></span> <span class="hi">cmd</span>
 <span class="bad">The command prompt has been disabled by your administrator.</span>
 <span class="bad">Press any key to continue . . .</span></pre>
+
+  <figure>
+    <img src="assets/img/09-cmd-bloqueado.png" alt="Mensaje indicando que el simbolo del sistema fue deshabilitado por el administrador">
+    <figcaption><b>Fig. 9</b> — Validación de la contramedida: el usuario de RRHH ya no puede abrir el símbolo del sistema. Nótese que un atacante con privilegios sí puede evadirla, como demuestra la Fig. 7.</figcaption>
+  </figure>
   </div>
 
   <div class="note warn">
